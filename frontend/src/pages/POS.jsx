@@ -11,7 +11,7 @@ const POS = () => {
   useEffect(() => {
     const fetchMenu = async () => {
       try {
-        const res = await api.get("/menu-items");
+        const res = await api.get("/menu"); // Make sure this matches backend
         setMenuItems(res.data);
       } catch (err) {
         console.error(err);
@@ -25,7 +25,15 @@ const POS = () => {
   const fetchOrders = async () => {
     try {
       const res = await api.get("/orders");
-      setOrders(res.data.data || res.data);
+      // Populate menu item names if backend didn't populate
+      const ordersWithNames = res.data.map(order => ({
+        ...order,
+        items: order.items.map(item => {
+          const menuItem = menuItems.find(mi => mi._id === item.menuItemId) || {};
+          return { ...item, menuItemName: menuItem.name || item.menuItemId };
+        })
+      }));
+      setOrders(ordersWithNames);
     } catch (err) {
       console.error(err);
     }
@@ -35,7 +43,7 @@ const POS = () => {
   const addToOrder = (item) => {
     const existing = orderItems.find(oi => oi.menuItemId === item._id);
     if (existing) {
-      setOrderItems(orderItems.map(oi => 
+      setOrderItems(orderItems.map(oi =>
         oi.menuItemId === item._id ? { ...oi, quantity: oi.quantity + 1 } : oi
       ));
     } else {
@@ -47,14 +55,14 @@ const POS = () => {
   const placeOrder = async () => {
     if (!tableNumber) return alert("Please enter table number");
 
+    const user = JSON.parse(localStorage.getItem("user")) || {};
     try {
-      const res = await api.post("/orders", {
+      await api.post("/orders", {
         items: orderItems,
         tableNumber,
         orderType: "dine-in",
-        createdBy: "USER_ID"
+        createdBy: user.id
       });
-      console.log("Order Placed:", res.data);
       setOrderItems([]);
       fetchOrders(); // refresh orders list
     } catch (err) {
@@ -66,8 +74,7 @@ const POS = () => {
   // Complete order and reduce stock
   const completeOrder = async (orderId) => {
     try {
-      const res = await api.put(`/orders/${orderId}/complete`);
-      console.log("Order completed:", res.data);
+      await api.put(`/orders/${orderId}/complete`);
       fetchOrders(); // refresh orders list
     } catch (err) {
       console.error(err.response?.data?.message || err.message);
@@ -89,6 +96,7 @@ const POS = () => {
 
       {/* Menu Items */}
       <h2>Menu</h2>
+      {menuItems.length === 0 && <p>Loading menu...</p>}
       {menuItems.map(item => (
         <div key={item._id} style={{ marginBottom: "10px" }}>
           <span>{item.name} - ${item.price}</span>
@@ -122,7 +130,7 @@ const POS = () => {
           <ul>
             {order.items.map(item => (
               <li key={item._id}>
-                {item.menuItemId.name} x {item.quantity} ({item.status})
+                {item.menuItemName} x {item.quantity} ({item.status})
               </li>
             ))}
           </ul>
@@ -139,3 +147,4 @@ const POS = () => {
 };
 
 export default POS;
+
